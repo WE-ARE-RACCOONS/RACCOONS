@@ -1,0 +1,282 @@
+---
+title: 'Context API란'
+date: '2023-11-07'
+tags: ['Frontend']
+draft: false
+summary: 'React에서 단계마다 일일이 props를 넘겨주지 않고도, 컴포넌트 트리 전체에 데이터를 제공할 수 있게끔 하는 도구인 Context API'
+images: []
+---
+
+🦡 작성자 : 혜원
+
+### ✨ Context 란?
+
+💡 React에서 단계마다 일일이 props를 넘겨주지 않고도, 컴포넌트 트리 전체에 데이터를 제공할 수 있게끔 하는 도구를 말한다.
+
+일반적인 React 애플리케이션에서, 데이터는 위에서 아래로(즉, 부모 → 자식) props를 통해 전달됨  
+하지만 애플리케이션 안의 여러 컴포넌트에 전해줘야 하는 props의 경우 이 과정이 번거로울 수 있다.  
+→ Context를 이용하면 이 문제를 해결할 수 있음
+
+### ✨ 언제 Context를 써야 할까
+
+Context는 React 컴포넌트 트리 안에서 전역적(global)인 데이터를 공유할 수 있도록 고안된 방법  
+ex 현재 로그인한 유저, 테마, 선호하는 언어...
+
+```tsx
+class App extends React.Component {
+  render() {
+    return <Toolbar theme="dark" />
+  }
+}
+
+function Toolbar(props) {
+  return (
+    <div>
+      <ThemedButton theme={props.theme} />
+    </div>
+  )
+}
+
+class ThemedButton extends React.Component {
+  render() {
+    return <Button theme={this.props.theme} />
+  }
+}
+```
+
+이 코드에서 사실 theme 색깔이 필요한 컴포넌트는 ThemedButton인데,
+Toolbar는 오로지 ThemedButton에게 theme을 전달해 주기 위해 App에서 theme을 받는다.
+Toolbar는 스스로 theme을 사용하지 않으므로 불필요한 전달이 발생하는 것.
+
+Context를 이용해 이를 해결할 수 있다.
+
+### ✨ Context 사용 예시
+
+```tsx
+const ThemeContext = React.createContext('light')
+
+class App extends React.Component {
+  render() {
+    return (
+      <ThemeContext.Provider value="dark">
+        <Toolbar />
+      </ThemeContext.Provider>
+    )
+  }
+}
+
+function Toolbar() {
+  return (
+    <div>
+      <ThemedButton />
+    </div>
+  )
+}
+
+class ThemedButton extends React.Component {
+  static contextType = ThemeContext
+  render() {
+    return <Button theme={this.context} />
+  }
+}
+```
+
+React.createContext('light')로 기본값이 'light'인 ThemeContext를 생성.
+ThemeContext.Provider를 사용하여 하위 트리 전체에 dark 테마 값을 전달.
+ThemedButton은 contextType으로 ThemeContext를 지정해 현재 theme 값을 this.context로 읽음.
+이제 중간 Toolbar 컴포넌트는 theme 전달을 위한 props가 필요 없어짐.
+
+### ✨ Context 사용 시 주의사항
+
+Context의 주된 용도는 여러 레벨의 컴포넌트에 데이터를 전달하는 것.
+하지만, context 사용 시 컴포넌트 재사용이 어려워질 수 있으므로 꼭 필요할 때만 사용하자.
+
+props 전달이 복잡한 상황에서는 context보다 컴포넌트 합성을 활용하는 것이 더 단순할 수 있음.
+
+```tsx
+<Page user={user} avatarSize={avatarSize} />
+// ... 그 아래에 ...
+<PageLayout user={user} avatarSize={avatarSize} />
+// ... 그 아래에 ...
+<NavigationBar user={user} avatarSize={avatarSize} />
+// ... 그 아래에 ...
+<Link href={user.permalink}>
+  <Avatar user={user} size={avatarSize} />
+</Link>
+```
+
+이 경우 여러 단계에 걸쳐 user와 avatarSize를 전달하는 대신, 컴포넌트를 통째로 전달하는 방법으로 해결할 수 있음.
+
+### ✨ Context 관련 API
+
+React.createContext
+
+```tsx
+const MyContext = React.createContext(defaultValue)
+```
+
+Context 객체를 생성하고, 구독 컴포넌트에 기본값을 설정한다.
+트리에서 적절한 Provider를 찾지 못할 때만 기본값을 사용하며, Provider가 undefined를 전달해도 기본값이 아닌 undefined를 읽게 된다.
+
+Context.Provider
+
+```tsx
+<MyContext.Provider value={/* 어떤 값 */}>
+```
+
+Provider는 value prop을 받아 이를 하위 컴포넌트에 전달한다.
+컴포넌트 트리에서 가장 가까운 Provider의 값을 사용하며, value가 변경될 때마다 모든 구독 컴포넌트가 다시 렌더링된다.
+
+Class.contextType
+클래스 컴포넌트에서 context를 사용하기 위해 contextType 프로퍼티를 지정할 수 있음.
+
+```tsx
+class MyClass extends React.Component {
+  static contextType = MyContext
+  render() {
+    let value = this.context
+    /* context 값을 이용한 렌더링 */
+  }
+}
+```
+
+Context.Consumer
+함수형 컴포넌트에서 context 구독을 위해 Consumer를 사용할 수 있다
+
+```tsx
+<MyContext.Consumer>
+  {value => /* context 값을 이용한 렌더링 */}
+</MyContext.Consumer>
+Consumer의 자식은 반드시 함수여야 하며, 현재 context 값을 받는다.
+
+Context.displayName
+```
+
+```tsx
+const MyContext = React.createContext(/* some value */)
+MyContext.displayName = 'MyDisplayName'
+```
+
+React 개발자 도구에서 표시될 context 이름을 설정할 수 있다.
+
+### Context를 이용한 다양한 예시
+
+값이 변하는 context
+theme-context.js
+
+```ts
+export const themes = {
+  light: {
+    foreground: '#000000',
+    background: '#eeeeee',
+  },
+  dark: {
+    foreground: '#ffffff',
+    background: '#222222',
+  },
+}
+
+export const ThemeContext = React.createContext(themes.dark)
+```
+
+```ts
+import { ThemeContext } from './theme-context'
+
+class ThemedButton extends React.Component {
+  render() {
+    let props = this.props;
+    let theme = this.context;
+    return (
+      <button {...props} style={{ backgroundColor: theme.background }} />
+    );
+  }
+}
+ThemedButton.contextType = ThemeContext;
+
+export default ThemedButton;
+```
+
+```tsx
+import { ThemeContext, themes } from './theme-context'
+import ThemedButton from './themed-button'
+
+function Toolbar(props) {
+  return <ThemedButton onClick={props.changeTheme}>Change Theme</ThemedButton>
+}
+
+class App extends React.Component {
+  constructor(props) {
+    super(props)
+    this.state = {
+      theme: themes.light,
+    }
+
+    this.toggleTheme = () => {
+      this.setState((state) => ({
+        theme: state.theme === themes.dark ? themes.light : themes.dark,
+      }))
+    }
+  }
+
+  render() {
+    return (
+      <ThemeContext.Provider value={this.state.theme}>
+        <Toolbar changeTheme={this.toggleTheme} />
+        <ThemedButton />
+      </ThemeContext.Provider>
+    )
+  }
+}
+
+const root = ReactDOM.createRoot(document.getElementById('root'))
+root.render(<App />)
+```
+
+Provider 안에 있는 ThemedButton은 state에서 theme 값을 읽으며, Provider 밖의 ThemedButton은 기본값 사용.
+
+### ✨ 여러 context 구독하기
+
+Context마다 Consumer를 개별 노드로 생성하여, context 변화를 위한 재렌더링이 최적화되도록 함.
+
+```tsx
+const ThemeContext = React.createContext('light')
+const UserContext = React.createContext({ name: 'Guest' })
+
+function Content() {
+  return (
+    <ThemeContext.Consumer>
+      {(theme) => (
+        <UserContext.Consumer>
+          {(user) => <ProfilePage user={user} theme={theme} />}
+        </UserContext.Consumer>
+      )}
+    </ThemeContext.Consumer>
+  )
+}
+```
+
+Content 컴포넌트는 ThemeContext와 UserContext를 모두 구독한다.
+
+### ✨ 주의사항
+
+Provider의 value가 객체일 경우 새로운 객체가 생성되며 하위 컴포넌트가 모두 다시 렌더링될 수 있다.
+이를 방지하려면 value 값을 부모 state에 저장하여 관리하는 것이 좋다.
+
+```tsx
+class App extends React.Component {
+  constructor(props) {
+    super(props)
+    this.state = {
+      value: { something: 'something' },
+    }
+  }
+
+  render() {
+    return (
+      <MyContext.Provider value={this.state.value}>
+        <Toolbar />
+      </MyContext.Provider>
+    )
+  }
+}
+```

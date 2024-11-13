@@ -1,0 +1,172 @@
+---
+title: 'JSON-LD'
+date: '2024-10-19'
+tags: ['Frontend']
+draft: false
+summary: 'JSON-LD적용 여정기'
+images: []
+---
+
+🦡 작성자 : 효중
+
+### 메타데이터
+
+메타데이터는 SEO에 있어서 필수적인 역할을 합니다.
+
+보통 HTML의 head부분에 위치한 meta태그를 통해 정의되는데, 이 정보는 검색 엔진이 페이지의 내용을 이해하는 데 도움을 줍니다.
+
+Next에서는 layout.tsx이나 page.tsx에서 정적인 metadata를 정의하는 편입니다.
+
+만약 동적인 metadata가 필요한 상황이라면 동적으로 metadata를 만들 수도 있씁니다. (아래의 예시처럼요!)
+
+```tsx
+export async function generateMetadata({
+  params,
+}: {
+  params: {
+    slug: string
+  }
+}): Promise<Metadata> {
+  const post = getPostBySlug(params.slug, [
+    'title',
+    'content',
+    'excerpt',
+    'date',
+    'author',
+    'image',
+  ])
+
+  const dynamicMetaTag: Metadata = {
+    title: post.title,
+    description: post.excerpt,
+    alternates: {
+      canonical: `${getCurrentBasePath()}/blog/${decodeURIComponent(params.slug)}`,
+    },
+    openGraph: {
+      type: 'website',
+      siteName: `${post.title}`,
+      locale: 'ko-KR',
+    },
+    keywords: post.title,
+
+    robots: {
+      index: true,
+      follow: true,
+      googleBot: {
+        index: true,
+        follow: true,
+      },
+    },
+    viewport: {
+      width: 'device-width',
+      initialScale: 1,
+    },
+    verification: {
+      google: 'g3Daim29whdK1ZzL1CE6pvkYyvSgM5-6C898-TVjiz0',
+    },
+  }
+  return dynamicMetaTag
+}
+```
+
+### JSON-LD
+
+SEO를 최적화 하는 또 다른 방법 중 하나는 JSON-LD를 사용하는 것입니다.
+
+JSON-LD는 웹 사이트의 데이터를 구조화 해, 검색 엔진이 콘텐츠를 더 잘 이해하도록 도와줍니다.
+
+JSON-LD는 Javascript Object Notation for Linked Data의 약자입니다.
+
+말 그대로 연결된 데이터를 JSON형식으로 표현해주는데,
+
+예를 들어 제품 정보나 제품 리스트의 정보를 JSON-LD형식으로 마크업 하면, 해당 제품의 정보를 직접 보여줄 수 있게 됩니다.
+
+보통 이 JSON-LD도 layout이나 page에 정의하는 편인데요,
+
+메타데이터를 풍부하게 해주기 때문에 유용합니다.
+
+먼저 layout에 김선배에 대한 구조화된 정보를 제공해보겠습니다.
+
+아래처럼 JSON-LD를 객체로 정의해주고 script를 통해 주입하게 되는데요.
+
+아래의 JSON-LD를 만들고 layout의 script부분에 주입을 해줍니다.
+
+```tsx
+<script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
+```
+
+```tsx
+//전역 layout.tsx
+
+const jsonLd = {
+  '@context': 'https://schema.org',
+  '@type': 'Organization',
+  name: '대학원 김선배',
+  description: '예비 대학원생과 실제 랩실에 있는 대학원생을 매칭해주는 서비스',
+  url: 'https://develop.dttx948lk1tf.amplifyapp.com',
+  logo: 'https://develop.dttx948lk1tf.amplifyapp.com/og.png',
+}
+```
+
+이번에는 선배 회원들의 정보들이 쭉 리스트 되어 나타나는 곳에 JSON-LD를 적용해볼게요.
+
+prefetchQuert를 통해 갖고 온 데이터를 쭉 돌면서 itemListElement에 하나하나씩 정보를 추가해줍니다.
+
+```tsx
+import { Hydrate, QueryClient, dehydrate } from '@tanstack/react-query'
+import { getSeniorList } from '@/api/senior/getSeinorList'
+import { SeniorList } from '@/components/SeniorList'
+
+export default async function Home() {
+  const queryClient = new QueryClient()
+  await queryClient.prefetchInfiniteQuery({
+    queryKey: ['seniorList'],
+    queryFn: () => getSeniorList({ field: 'all', postgradu: 'all', page: 1 }),
+    getNextPageParam: (lastPage) => lastPage.data.seniorSearchResponses.length + 1,
+  })
+
+  const jsonLd = {
+    '@context': 'https://schema.org',
+    '@type': 'ItemList',
+    itemListElement: [
+      {
+        '@type': 'Person',
+        position: 1,
+        item: {
+          '@type': 'Person',
+          name: 'Senior 1',
+          description: 'Description of Senior 1',
+        },
+      },
+    ],
+  }
+
+  const seniorData = await queryClient.fetchQuery({
+    queryKey: ['seniorList'],
+    queryFn: () => getSeniorList({ field: 'all', postgradu: 'all', page: 1 }),
+  })
+
+  jsonLd.itemListElement = seniorData.data.seniorSearchResponses.map((senior, index) => ({
+    '@type': 'ListItem',
+    position: index + 1,
+    item: {
+      '@type': 'Person',
+      name: senior.nickName,
+      description: [senior.keyword, senior.lab, senior.professor].join(', '),
+      image: senior.profile,
+    },
+  }))
+
+  return (
+    <Hydrate state={dehydrate(queryClient)}>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+      />
+      <SeniorList />
+    </Hydrate>
+  )
+}
+```
+
+이렇게 등록을 해주면 JSON-LD의 구조화된 정보가 잘 표현되는 것을 볼 수 있습니다.

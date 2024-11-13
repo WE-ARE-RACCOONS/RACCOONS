@@ -1,0 +1,327 @@
+---
+title: '김선배에서 사용하는 모달들을 어떻게 관리할까!'
+date: '2024-11-07'
+tags: ['Frontend']
+draft: false
+summary: '이렇게 많은 모달은 처음인지라..'
+images: []
+---
+
+🦡 작성자 : 효중
+
+### 이렇게 많은 모달은 처음보는지라,,
+
+먼저 김선배 서비스에 합류하기 전에, 제가 개발하면서 본 최대의 모달 개수는 몇 안되었습니다.
+
+기껏해야 1-2개의 모달 컴포넌트를 쓰고 있었고, 그마저도 형태가 비슷한 모달을 써서, 서비스 내의 많은 모달을 보고 모달이 진짜 많다라는 감탄도 하고, 서비스 내에서 쓰이는 모달이 이렇게도 많을 수 있겠다,,하는 생각도 많이 하였는데요!
+
+한편으로는 많은 모달들을 어떻게 선언적으로 관리할 수 있을까?의 고민도 많이 하였어요.
+
+김선배에서 쓰이는 모달은 크게 3개로 나뉘게됩니다.
+
+**FullModal:** 전체 화면을 차지하면서 배경색은 흰색인 모달
+
+**RiseUpModal**: 아래에서 올라오는 bottomsheet형태의 모달
+
+**DImmedModal**: 전체 화면을 차지하면서 배경색은 어두운 모달
+
+그리고 각각 모달을 useModal의 훅으로 사용하고 있는 구조였습니다.
+
+```tsx
+'use client'
+import { useState, useEffect } from 'react'
+
+function useModal(portalId: string) {
+  const [modal, setModal] = useState(false)
+  const [portalElement, setPortalElement] = useState<Element | null>(null)
+
+  useEffect(() => {
+    const portalIdEl = document.getElementById(portalId)
+    if (!portalIdEl) {
+      return
+    }
+    setPortalElement(portalIdEl)
+  }, [modal])
+
+  const modalHandler = () => {
+    setModal(!modal)
+  }
+
+  return {
+    modal,
+    modalHandler,
+    portalElement,
+  }
+}
+
+export default useModal
+```
+
+그리고 이 모달 훅을 컴포넌트 단에서는 다음과 같이 사용하고 있었어요
+
+```tsx
+const {
+  modal: suggestModal,
+  modalHandler: suggestModalHandler,
+  portalElement: suggesPortalElement,
+} = useModal('suggest-mypage-portal')
+```
+
+제가 위와 같은 형태로 모달을 관리하는 것의 문제점은 크게 다음과 같았습니다.
+
+각 모달마다 createPortal을 통해 모달을 등록하고 관리합니다.
+모달이 늘어나면 늘어날수록 layout.tsx에 모달과 관련한 요소들이 기하급수적으로 늘어나고,
+그에 따라 모달을 선언적으로 관리하기 힘들어집니다.
+
+실제로 처음 김선배의 layout파일에는 모달의 Portal과 관련한 코드들이 굉장히 많았습니다.
+
+```tsx
+import './globals.css'
+import type { Metadata } from 'next'
+
+export default function RootLayout({ children }: { children: React.ReactNode }) {
+  return (
+    <html lang="ko">
+      <body>
+        {process.env.NEXT_PUBLIC_GTM_ID ? <GTMAnalytics /> : <></>}
+        {process.env.NEXT_PUBLIC_GA4_ID ? <GoogleAnalytics /> : <></>}
+        <Providers>
+          <StyledComponentsRegistry>
+            {children}
+            <div id="senior-info-portal"></div>
+            <div id="junior-mentoring-detail"></div>
+            <div id="junior-mentoring-cancel"></div>
+            <div id="senior-profile-portal"></div>
+            <div id="login-request-portal"></div>
+            <div id="senior-best-case-portal"></div>
+            <div id="login-request-full-portal"></div>
+            <div id="search-portal"></div>
+            <div id="senior-my-profile-portal"></div>
+            <div id="senior-request-portal"></div>
+            <div id="junior-request-portal"></div>
+            <div id="profile-modify-portal"></div>
+            <div id="senior-mentoring-detail"></div>
+            <div id="senior-mentoring-cancel"></div>
+            <div id="senior-mentoring-accept"></div>
+            <div id="senior-info-modify-portal"></div>
+            <div id="senior-mentoring-time-portal"></div>
+            <div id="senior-profile-not-registered"></div>
+            <div id="select-date-calendar"></div>
+            <div id="suggest-mypage-portal"></div>
+            <div id="senior-auth-portal"></div>
+            <div id="mentoring-login-portal"></div>
+            <div id="change-junior-portal"></div>
+            <div id=" mentoring-cancel-success"></div>
+            <div id="pay-amount-portal"></div>
+          </StyledComponentsRegistry>
+        </Providers>
+      </body>
+    </html>
+  )
+}
+```
+
+### 어떻게 고쳐나갈까?
+
+여러 모달을 닫고, 여는 **동작들을 깔끔하고 선언적으로 관리**하기 위해 여러 방법들을 찾아보았습니다.
+
+- 직접 전역적인 모달 저장소(Store)를 만들고 관리하는 법
+- 다른 외부 라이브러리를 선택해서 여러 모달들을 관리하는 법
+
+직접 잘 만드는 것이 가장 좋지만, 언제나 그렇듯 **여러 백로그가 쌓여있는 상황, 일정을 고려해야 하는 상황**에서, 외부 라이브러리를 찾아보기 시작했어요.
+
+그러던 중, 지금 상황에서 가장 최적의 라이브러리라고 판단되는 overlay-kit를 선택했습니다.
+
+선택한 이유는 크게 3가지입니다.
+
+- 굉장히 작은 번들 크기를 갖고 있어요.
+  ![](https://efficacious-camel-96c.notion.site/image/https%3A%2F%2Fprod-files-secure.s3.us-west-2.amazonaws.com%2F5eda31ee-1593-4ecf-bfad-bae333b90117%2Fe40eff2a-7350-404c-b77a-6ea34c283479%2Fimage.png?table=block&id=4d77c09f-117a-42bd-b5b8-dd5cf7db2678&spaceId=5eda31ee-1593-4ecf-bfad-bae333b90117&width=810&userId=&cache=v2)
+- OverlayKitProvider로 주입만 해주면, 해당 Provider 밑에 모달들이 렌더링되어서,
+  여러 portal을 매번 만들 필요 없이, 모달을 관리할 수 있게 됩니다.
+- 모달을 여닫는 동작뿐만 아니라, 사용자가 모달에서 어떤 버튼을 누르고, 어떤 동작을 했는지 또한 관리해주어서 편리합니다.
+
+### 김선배에서 overlay-kit를 적용하기까지 이야기
+
+FullModal, RiseUpModal, DimmedModal은 개별의 모달이라고 생각을 하였어요.
+
+같은 모달이지만, FullModal은 배경색이 흰 모달이고, DimmedModal은 배경색이 어두운 모달, RIseUpModal은 바텀시트의 형태라,
+**추상화를 해서 3개의 모달을 하나로 통합해야 해!**의 관점과는 맞지 않다고 생각했고
+
+각 모달마다 관리하는 훅을 만들었습니다. FullModal은 useFullModal훅이, DimmedModal은 useDimmedModal이라는 훅을 통해 관리를 해주는 것입니다.
+
+이 과정에서 앞서 언급한 overlay-kit를 사용했는데요, 아래와 같은 훅을 만들어서 모달을 관리하고자 하였어요.
+
+모달을 열 때에는, overlaykit.open으로 FullModal을 받아온 props를 전달하면서 열어줍니다.
+
+그리고 모달을 닫아줄 때에는, unmount로 모달을 아예 React요소 트리와 메모리에서 지워줍니다.
+
+```tsx
+import FullModal from '@/components/Modal/FullModal'
+import { FullModalProps } from '@/types/modal/full'
+import { overlay } from 'overlay-kit'
+import { useState } from 'react'
+
+interface UseFullModalProps extends FullModalProps {
+  overlayId?: string
+}
+const useFullModal = ({ ...props }: Partial<UseFullModalProps>) => {
+  const [isOpen, setIsOpen] = useState(false)
+
+  const openModal = () => {
+    setIsOpen(true)
+    overlay.open(
+      ({ unmount }) => {
+        return (
+          <FullModal
+            {...props}
+            modalType={props?.modalType ?? 'best-case'}
+            modalHandler={() => {
+              if (props.modalHandler) {
+                props.modalHandler()
+              }
+              closeModal(unmount)
+            }}
+            cancelModalHandler={() => {
+              if (props.cancelModalHandler) {
+                props.cancelModalHandler()
+              }
+              closeModal(unmount)
+            }}
+          />
+        )
+      },
+      {
+        overlayId: props.overlayId ?? '',
+      }
+    )
+  }
+
+  const closeModal = (unmount: () => void) => {
+    setIsOpen(false)
+    unmount()
+  }
+
+  const toggleModal = () => {
+    if (isOpen) {
+      closeModal(() => {})
+    } else {
+      openModal()
+    }
+  }
+
+  return { openModal, closeModal, toggleModal, isOpen }
+}
+
+export default useFullModal
+```
+
+이렇게 각 FullModal,DimmedModal별로 각각의 useFullModal,useDimmedModal을 만들어주었어요.
+
+그리고 해당 훅을 컴포넌트에서 아래와 같이 사용해주었습니다.
+
+```tsx
+const { openModal: openSeniorMentoringTimeModal } = useFullModal({
+  modalType: 'senior-mentoring-time',
+})
+```
+
+이렇게 훅을 쓰게되면, 결국 createPortal을 쓸 필요도 없고, layout파일에 portal과 관련한 요소를 아예 지울 수 있게 됩니다.
+
+실제로 overlaykit를 쓰고 변경된 layout은 portal과 관련된 요소가 많이 줄어든 것을 볼 수 있어요
+
+```tsx
+import './globals.css'
+import type { Metadata } from 'next'
+import Providers from '@/components/Provider/providers'
+import StyledComponentsRegistry from '@/lib/registry'
+import GTMAnalytics from '@/components/GA/GTM'
+import GoogleAnalytics from '@/components/GA/GA'
+import { SERVICE_METADATA } from '@/constants/meta/metaData'
+import OverlayKitProvider from '@/lib/overlay'
+
+export default function RootLayout({ children }: { children: React.ReactNode }) {
+  return (
+    <html lang="ko">
+      <body>
+        {process.env.NEXT_PUBLIC_GTM_ID ? <GTMAnalytics /> : <></>}
+        {process.env.NEXT_PUBLIC_GA4_ID ? <GoogleAnalytics /> : <></>}
+        <Providers>
+          <StyledComponentsRegistry>
+            <OverlayKitProvider>
+              {children}
+              <div id="junior-mentoring-cancel"></div>
+              <div id="senior-request-portal"></div>
+              <div id="senior-mentoring-cancel"></div>
+              <div id="suggest-mypage-portal"></div>
+              <div id="senior-auth-portal"></div>
+              <div id=" mentoring-cancel-success"></div>
+            </OverlayKitProvider>
+          </StyledComponentsRegistry>
+        </Providers>
+      </body>
+    </html>
+  )
+}
+```
+
+### 복잡한 상황에서도 overlay-kit는 유용하였습니다.
+
+서비스를 개발하면서, 아래의 요구사항이 존재했습니다.
+
+사용자가 카카오 로그인을 합니다 → 탈퇴한 회원의 경우 계정을 재활성화 할 수 있는 모달이 등장합니다 → 재활성화 할 경우 다시 카카오 로그인을, 그렇지 않은 경우 메인페이지로 다시 돌아갑니다.
+
+해당 요구사항도 overlay-kit로 구현을 해보았는데요 , 아래와 같이 삭제된 유저의 경우 openAsync함수를 사용해, 계정을 재활성화 할 것인지 묻는 모달을 랜더링합니다.
+
+만약, 계정을 재활성화버튼을 누른다면, 다시 계정 재활성화 요청을 보내고, 사용자 정보를 업데이트해줍니다.
+
+그렇지 않고, 취소버튼을 누른다면 (!agreeActivateAccount) 바로 메인페이지로 돌아가게 됩니다.
+
+어느정도 복잡한 로직도, overlay-kit로 어느정도 깔끔하게 처리를 할 수 있었습니다.
+
+읽어주셔서 감사합니다. 🤡
+
+```tsx
+const fetchKakaoData = async () => {
+  try {
+    const { data: kakaoAuthFetchRes } = await kakaoAuthFetch({
+      code: code ?? '',
+    })
+
+    const { socialId, isDelete } = kakaoAuthFetchRes.data
+
+    if (kakaoAuthFetchRes.code === 'AU204') {
+      setUserContext(kakaoAuthFetchRes)
+      router.push('/')
+      return
+    }
+
+    if (isDelete) {
+      await overlay.openAsync<boolean>(({ unmount }) => (
+        <FullModal
+          modalType="account-reactive"
+          modalHandler={async () => {
+            await rejoinPatchFetch({
+              socialId,
+              rejoin: true,
+            }).then((res) => {
+              if (findExCode(res.data.code)) {
+                router.push('/')
+              }
+              setUserContext(res.data)
+              router.push('/')
+              unmount()
+            })
+          }}
+          cancelModalHandler={async () => {
+            await rejoinPatchFetch({ socialId, rejoin: false }).then(() => {
+              unmount()
+            })
+          }}
+        />
+      ))
+    }
+  } catch (error) {
+    console.error(error)
+  }
+}
+```

@@ -1,0 +1,256 @@
+---
+title: 'Prometheus + Grafana를 활용한 모니터링'
+date: '2024-02-29'
+tags: ['Backend']
+draft: false
+summary: 'Prometheus + Grafana를 활용한 모니터링 구축여정'
+images: []
+---
+
+🦡 작성자 : 원준
+
+이번 프로젝트에는 서버와 어플리케이션을 모니터링 하기 위해서 Prometheus와 Grafana를 활용하여 모니터링 시스템을 구축했다.
+
+우선 각각 무엇인지 살펴보고 이어서 진행하도록 하자.
+
+## Prometheus 와 Grafana
+
+### Prometheus
+
+Prometheus는 간단하게 말하면 **시계열 데이터베이스 및 수집 도구** 라고 한다.
+
+- 풀 방식의 메트릭 수집, 시계열 데이터 저장
+- PromQL을 활용하여 저장된 시계열을 쿼리 및 집계
+- 서비스 디스커버리
+- 데이터 시각화 (주로 Grafana로 대체하여 사용)
+
+이러한 기능이 대표적이라고 한다.
+
+이는 주기적으로 수집 대상의 엔드포인트에 HTTP Request를 날려 데이터를 수집하고 내부 데이터베이스에 적재하는 Pull System이다.
+
+그리고 특정 메트릭이 임계치를 넘어가거나 경계에 잡혔을 때 이메일, 슬랙 등을 통해 알림 전송 기능을 가지고 있다고 한다.
+
+### Grafana
+
+Grafana는 Prometheus와 같이 다양한 **데이터 소스로 부터 시계열 데이터를 가져와 시각화하고 대시보드를 만들어주는 도구** 라고 한다.
+
+이를 통해서 간단하고 쉽게 모니터링 정보를 시각화하고 확인할 수 있다.
+
+## Prometheus와 Grafana 설치
+
+### node_exporter 설치 (운영 서버)
+
+Prometheus를 설치하기 이전에 우선, 서버의 정보를 받기 위해서 서버에 Exporter를 설치해야 한다.
+
+왜냐하면 Prometheus는 Exporter를 통해 정보를 수집하기 때문이다.
+
+참고로 **Exporter는 시스템의 정보를 수집하고 HTTP 엔드포인트 로 메트릭을 노출시켜주는 기능을 가지고 있다.**
+
+<aside>
+✅ **Exporter 설치**
+리눅스 서버를 사용하는 경우에는 리눅스에서 공식적으로 제공되는 **Node Exporter** 를 사용하면 된다.
+
+따라서 Node Exporter를 설치하고 실행시킨다면 `${자신의IP}:9100/metrics` 에 접근하여 각종 지표가 나오는 모습을 확인할 수 있다.
+
+</aside>
+
+### prometheus.yml 작성 (모니터링 서버)
+
+Prometheus가 Exporter로 부터 메트릭을 수집할 수 있도록 설정을 해야 한다.
+
+```yaml
+global:
+  scrape_interval: 15s
+
+scrape_configs:
+  - job_name: 'prometheus'
+    scrape_interval: 15s
+    static_configs:
+      - targets: ['localhost:9090']
+
+  - job_name: 'node'
+    static_configs:
+      - targets: ['${운영 서버 IP}:9100']
+```
+
+여기서 아래 부분의 코드를 살펴보자.
+
+```yaml
+- job_name: 'node'
+  static_configs:
+    - targets: ['${운영 서버 IP}:9100']
+```
+
+이 부분이 정보를 수집할 Exporter를 설정하는 부분이다.
+
+**이전에 설치한 Node_Exporter를 대상으로 정보를 수집하겠다는 설정을 하는 부분이다.**
+
+이와 같이 대상 Exporter를 추가하면 여러 Exporter를 통해 정보를 수집할 수 있다.
+
+### Prometheus와 Grafana 설치(Docker) (모니터링 서버)
+
+이어서 Prometheus와 Grafana를 설치하도록 하자.
+
+우리는 Docker를 사용하기 때문에 docker-compose를 이용하여 yml파일을 작성하여 설치할 것이다.
+
+```yaml
+version: '3'
+
+networks:
+  monitor:
+    driver: bridge
+
+services:
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus
+    volumes:
+      - /home/ec2-user/config/monitoring:/etc/prometheus/
+    ports:
+      - 9090:9090
+    command:
+      - '--web.enable-lifecycle'
+      - '--config.file=/etc/prometheus/prometheus.yml'
+    restart: always
+    networks:
+      - monitor
+    user: root
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana
+    volumes:
+      - /home/ec2-user/config/monitoring/grafana:/var/lib/grafana
+      - /home/ec2-user/config/monitoring/grafana/provisioning:/etc/grafana/provisioning
+    environment:
+      - GF_SECURITY_ADMIN_USER="아이디 입력"
+      - GF_SECURITY_ADMIN_PASSWORD="비밀번호 입력"
+      - GF_USERS_ALLOW_SIGN_UP=false
+    restart: always
+    networks:
+      - monitor
+    ports:
+      - 3000:3000
+    user: root
+    depends_on:
+      - prometheus
+```
+
+이렇게 docker-compose.yml 파일을 작성하여 두가지를 동시에 설치하고 구성할 수 있다.
+
+이어서 docker-compose.yml 를 동작시켜서 서비스를 실행하게 되면 Prometheus와 Grafana가 동작을 시작하게 된다.
+
+![](https://efficacious-camel-96c.notion.site/image/https%3A%2F%2Fprod-files-secure.s3.us-west-2.amazonaws.com%2F5eda31ee-1593-4ecf-bfad-bae333b90117%2F5998639d-324c-4e4e-ac2a-4f722507db5c%2FUntitled.png?table=block&id=0370dd0b-9447-4c28-8127-0289b37752c4&spaceId=5eda31ee-1593-4ecf-bfad-bae333b90117&width=1420&userId=&cache=v2)
+
+이제 `${모니터링 서버}:3000` 을 통해 Grafana에 접근할 수 있다.
+
+## Grafana 설정
+
+브라우저를 통해 Grafana에 접근하여 설정을 시작할 수 있다.
+
+![](https://efficacious-camel-96c.notion.site/image/https%3A%2F%2Fprod-files-secure.s3.us-west-2.amazonaws.com%2F5eda31ee-1593-4ecf-bfad-bae333b90117%2F0684ccf8-20de-4d55-b856-da02f069d717%2FUntitled.png?table=block&id=3b663a18-a320-4410-8452-833ba1aad84a&spaceId=5eda31ee-1593-4ecf-bfad-bae333b90117&width=1420&userId=&cache=v2)
+
+이제 Grafana에서 Prometheus의 데이터를 가져올 수 있도록 DataSource로 Prometheus를 설정하자.
+
+이어서 연결하기 위한 정보를 입력하고 연결을 하면 된다.
+
+이제 Grafana에 대시보드를 만들 수 있는데, 처음부터 만드는 것은 매우 어렵다. 따라서 잘 만들어진 대시보드 템플릿을 둘러보고 선택해서 Import할 수 있다.
+
+![](https://efficacious-camel-96c.notion.site/image/https%3A%2F%2Fprod-files-secure.s3.us-west-2.amazonaws.com%2F5eda31ee-1593-4ecf-bfad-bae333b90117%2F86f55e65-72ee-4b41-98cb-c0efca420274%2FUntitled.png?table=block&id=ff031568-bf49-4441-ad44-3fe67fb4d63c&spaceId=5eda31ee-1593-4ecf-bfad-bae333b90117&width=1420&userId=&cache=v2)
+
+그렇게 적당한 대시보드를 가져와서 확인하면 위와 같이 대시보드가 이쁘게 잘 나오는 것을 확인할 수 있다.
+
+(위의 서버는 프리티어 서버라서… 작다 🫠)
+
+이렇게 서버에 대한 모니터링을 구축할 수 있다.
+
+## 어플리케이션 모니터링
+
+지금까지 서버 모니터링을 구축하였는데, 현재 올려져있는 어플리케이션에 대한 모니터링 또한 추가로 구축할 수 있다.
+
+(참고로 SpringBoot 어플리케이션에 대한 모니터링이다)
+
+### **Spring Boot Actuator**
+
+SpringBoot 어플리케이션 모니터링을 위해서도 이전에 설명한 것과 같은 방식으로 진행이 된다.
+
+**따라서 우선 Prometheus가 Exporter를 통해 메트릭을 수집할 수 있어야 하는데, 이때 Spring Boot Actuator가 Exporter와 같은 역할을 한다.**
+
+### 의존성 추가
+
+```bash
+implementation 'org.springframework.boot:spring-boot-starter-actuator'
+runtimeOnly 'io.micrometer:micrometer-registry-prometheus'
+```
+
+`build.gradle` 에 위와 같은 의존성을 추가하면 Actuator를 활성화 할 수 있다.
+
+> 참고로 SpringBoot 2.xx 부터는 메트릭 수집을 위해 Micrometer 라는 라이브러리가 사용되기 때문에 두번째 라이브러리 또한 추가되어야 한다고 한다.
+
+추가로 해야할 작업이 있는데, 이제 Prometheus에서 사용되는 메트릭에 대한 엔드포인트를 노출해야 한다.
+
+```yaml
+management:
+  endpoints:
+    web:
+      exposure:
+        include: prometheus
+```
+
+이를 `application.yml` 에 추가하여 엔드포인트를 추가로 노출 시킨다.
+
+(참고로, include에는 노출할 엔드포인트 이름을 쉼표로 구분하여 작성하면 되며 반대로 exclude에는 노출하고 싶지 않은 엔드포인트 이름을 작성하면 된다)
+
+### promethues.yml 추가
+
+위에서 작성한 prometheus.yml에 내용을 추가해서 어플리케이션에 대한 정보 또한 수집할 수 있도록 해주자.
+
+```yaml
+global:
+  scrape_interval: 15s
+
+scrape_configs:
+  - job_name: 'prometheus'
+    scrape_interval: 15s
+    static_configs:
+      - targets: ['localhost:9090']
+
+  - job_name: 'node'
+    static_configs:
+      - targets: ['${운영 서버 IP}:9100']
+
+  - job_name: 'spring'
+    metrics_path: '/actuator/prometheus' #/metrics가 아닌 해당 경로를 통해 접근
+    static_configs:
+      - targets: ['${운영 서버 IP}:${port번호}']
+```
+
+이렇게 작성해주면 우리의 어플리케이션의 메트릭 또한 수집할 수 있다.
+
+### Grafana 설정
+
+이전과 같은 방식으로 Grafana를 설정해주면 된다.
+
+마찬가지로 사용하기 편리한 대시보드를 가져와서 추가하게 되면
+
+![](https://efficacious-camel-96c.notion.site/image/https%3A%2F%2Fprod-files-secure.s3.us-west-2.amazonaws.com%2F5eda31ee-1593-4ecf-bfad-bae333b90117%2Fe13ced1e-786b-4a2e-a05d-d6d61c40dfed%2FUntitled.png?table=block&id=10bf6b35-05de-40f2-91fc-46e6e821bb09&spaceId=5eda31ee-1593-4ecf-bfad-bae333b90117&width=1420&userId=&cache=v2)
+
+이렇게 대시보드가 이쁘게 나오는 모습을 확인할 수 있다.
+
+(참고로 job을 통해 각각 어디서 수집하는 정보를 기반으로 하는지 선택할 수 있다.)
+
+## 주의 사항
+
+### 운영 서버와 Prometheus&Grafana는 각각의 서버를 사용해야 한다
+
+물론, 분리하지 않는 경우에는 간단한 환경, 추가적인 서버 부담 과 같은 부분에 대해서 이점이 있다.
+
+하지만 정확한 측정을 위해 그리고 몇가지 추가적인 이점을 위해서 분리하는 것이 좋다고 생각한다.
+
+우선 모니터링 작업이 운영 서버의 리소스를 소모할 수 있는데, 이러한 부분이 정확한 측정을 방해할 수 있다.
+
+그로 인해 데이터가 왜곡될 수 있으며, 장애가 발생할 때 정확한 판단이 어려울 수 있다.
+
+뿐만 아니라 보안적으로 좀 더 견고하게 작업을 할 수 있다.
+
+따라서 운영 서버와 모니터링 서버는 분리해서 각각 운영하는 것이 좋다.

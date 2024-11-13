@@ -1,0 +1,128 @@
+---
+title: '사용자의 정보를 받을 떄, 암호화를 어느정도까지 해야만 하는가?'
+date: '2023-11-21'
+tags: ['Backend, Frontend']
+draft: false
+summary: '어디까지 암호화를 해야 법적으로 책임이 없을까?'
+images: []
+---
+
+🦡 작성자 : 원준
+
+### 사용자의 정보를 받다 보면 개인 정보를 받는 경우가 생길 수 있다.
+
+그렇다면 어디까지 암호화를 해야 법적으로 책임이 없을까?
+
+![](https://efficacious-camel-96c.notion.site/image/https%3A%2F%2Fprod-files-secure.s3.us-west-2.amazonaws.com%2F5eda31ee-1593-4ecf-bfad-bae333b90117%2F1273f553-7fb8-430f-9e56-14c2c15a7ac6%2FUntitled.png?table=block&id=6e130515-c38b-4c36-8161-8349d3fb3298&spaceId=5eda31ee-1593-4ecf-bfad-bae333b90117&width=1420&userId=&cache=v2)
+
+### 우리는 무엇을 암호화 해야하나
+
+1. **주민등록번호**
+2. **계좌번호**
+
+우리의 경우 위와 같이 두가지 정보를 암호화 처리해야 할 필요가 있다.
+
+(비밀번호, 바이오 정보, 여권번호 등등 다양한 요소에 대해 암호화가 필수지만 우리는 없다~)
+
+**위 정보들은 암호화 하지 않으면 법적으로 제제를 받을 수 있다.**
+
+---
+
+## 사용할 암호화 알고리즘 AesBytesEncryptor (양방향 암호화)
+
+SpringSecurity에서 제공해주는 양방향 암호화인 `AesBytesEncryptor` 사용하고자 한다.
+
+흔히 비밀번호 저장할 때 사용하던 `BCryptPasswordEncoder` 의 경우 해시 함수를 사용하여 암호화하는데, 이는 단방향 암호화 알고리즘으로 복호화가 불가능하기 때문에 매치 여부를 확인하는 비밀번호가 아닌 조회를 해야하는 주민번호, 계좌번호의 경우는 다른 암호화 방식을 사용할 것이다.
+
+`AesBytesEncryptor` 는 대칭키 알고리즘을 통해 암호화 하기 때문에, 우리의 `application.yml` 에 키를 저장하고 해당 키를 통해서 암호화, 복호화를 진행할 예정이다.
+
+### 설정 및 구현
+
+```java
+@Configuration
+@EnableWebSecurity
+@RequiredArgsConstructor
+public class SecurityConfig {
+	  ...
+
+		@Value("${aesBytesEncryptor.secret}")
+    private String secretKey;
+    @Value("${aesBytesEncryptor.salt}")
+    private String salt;
+
+    @Bean
+    public AesBytesEncryptor aesBytesEncryptor() {
+        return new AesBytesEncryptor(secretKey, salt);
+    }
+
+    @Bean
+    protected SecurityFilterChain config(HttpSecurity http) throws Exception {
+		     ...
+		}
+}
+```
+
+이렇게 `AesBytesEncryptor` 를 Bean으로 등록해주고
+
+```java
+@Component
+@RequiredArgsConstructor
+public class EncryptorUtils {
+    private final AesBytesEncryptor encryptor;
+
+    public String encryptData(String data) {
+        byte[] encrypt = encryptor.encrypt(data.getBytes(UTF_8));
+        return byteArrayToString(encrypt);
+    }
+
+    public String decryptData(String data) {
+        byte[] decryptBytes = stringToByteArray(data);
+        byte[] decrypt = encryptor.decrypt(decryptBytes);
+        return new String(decrypt, UTF_8);
+    }
+
+    public String byteArrayToString(byte[] bytes) {
+        StringBuilder sb = new StringBuilder();
+        for (byte abyte : bytes) {
+            sb.append(abyte);
+            sb.append(" ");
+        }
+        return sb.toString();
+    }
+
+    public byte[] stringToByteArray(String byteString) {
+        String[] split = byteString.split("\\s");
+        ByteBuffer buffer = ByteBuffer.allocate(split.length);
+        for (String s : split) {
+            buffer.put((byte) Integer.parseInt(s));
+        }
+        return buffer.array();
+    }
+}
+```
+
+인코딩과 디코딩을 각각 수행할 수 있게 해준다.
+
+다만, 인코딩 결과가 byte로 나오기 때문에 이를 DB에 저장하기 위해서는 String으로 변경해줘야 한다.
+
+그리고, 마찬가지로 읽어와서 byte를 스트링으로 변경해주고 이를 스트링으로 변경해서 보여주면 된다.
+
+### 결과
+
+![](https://efficacious-camel-96c.notion.site/image/https%3A%2F%2Fprod-files-secure.s3.us-west-2.amazonaws.com%2F5eda31ee-1593-4ecf-bfad-bae333b90117%2Ffada357f-a551-427d-be8d-a6e4ad82f279%2FUntitled.png?table=block&id=b0a630e8-7173-445a-8a3a-521ad3915d70&spaceId=5eda31ee-1593-4ecf-bfad-bae333b90117&width=1420&userId=&cache=v2)
+
+![](https://efficacious-camel-96c.notion.site/image/https%3A%2F%2Fprod-files-secure.s3.us-west-2.amazonaws.com%2F5eda31ee-1593-4ecf-bfad-bae333b90117%2F861216d1-4246-40ea-8090-427a00ef98ff%2FUntitled.png?table=block&id=33dedca9-c2a8-4928-89c8-62eb8eb3fe18&spaceId=5eda31ee-1593-4ecf-bfad-bae333b90117&width=1420&userId=&cache=v2)
+
+```json
+{
+  "accountNumber": "123123",
+  "bank": "신한",
+  "accountHolder": "양우넌준",
+  "name": "양원준",
+  "rrn": "123123123"
+}
+```
+
+이렇게 요청을 해서 저장을 하면, 위와 같이 `accountNumber` 와 `rrn` 이 암호화 처리되어서 저장되는 것을 확인할 수 있다.
+
+물론, 이는 위의 `decryptData(String data)` 메소드를 사용하면 123123, 123123123 으로 복호화 되어서 보여진다.

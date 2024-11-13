@@ -1,0 +1,286 @@
+---
+title: 'Jotai정리'
+date: '2023-11-07'
+tags: ['Frontend']
+draft: false
+summary: 'Jotai에 대해 간단히 정리한 내용입니다'
+images: []
+---
+
+🦡 작성자 : 혜원
+
+프로젝트 상태 관리 도구로 Jotai를 도입하기로 했다! 그냥 Context api로 관리할까 Zustand를 쓸까 고민을 많이 하다가 Next.js에 좀 더 적합한 툴을 사용해 보기로 했다. 이 게시글은 Jotai 공식문서 첫 페이지에 나와 있는 핵심 내용만 간추려서 정리한 글이다🫡
+
+Jotai는 React 전역 상태 관리에 atomic하게 접근하는 방법을 취한다.
+
+atoms와 renders를 결합한 build state는 atom dependency에 따라 자동으로 최적화됨
+이것은 React context의 추가적인 리렌더 문제를 해결하고, memoization할 필요를 없애고, 선언적 프로그래밍 모델을 유지하면서 signal에 대해 유사한 개발자 경험을 제공
+
+```bash
+Installation
+// npm
+npm i jotai
+npm에서는 위와 같이 설치한다.
+Configuration
+Next.js (SWC)
+
+// npm
+npm install --save-dev @swc-jotai/react-refresh
+```
+
+```js
+// next.config.js
+experimental: {
+swcPlugins: [['@swc-jotai/react-refresh', {}]],
+}
+```
+
+우리 프로젝트에서는 Next.js, swc를 사용하기 때문에 위와 같은 설정이 필요하다. Babel이나 Gatsby 등의 설정은 공식문서에 더 자세히 나와 있다.
+
+Create atoms
+Primitive atoms
+
+primitive atom은 booleans, numbers, strings, objects, arrays, sets, maps 등 어떤 타입도 가능
+
+```ts
+import { atom } from 'jotai'
+
+const countAtom = atom(0)
+
+const countryAtom = atom('Japan')
+
+const citiesAtom = atom(['Tokyo', 'Kyoto', 'Osaka'])
+
+const animeAtom = atom([
+  {
+    title: 'Ghost in the Shell',
+    year: 1995,
+    watched: true,
+  },
+  {
+    title: 'Serial Experiments Lain',
+    year: 1998,
+    watched: false,
+  },
+])
+```
+
+Jotai에서 atom을 import해 와서 생성함
+Derived atoms
+
+derived atom은 자신의 값을 리턴하기 전에, 다른 atoms에게서 읽어올 수 있음
+
+```ts
+const progressAtom = atom((get) => {
+  const anime = get(animeAtom)
+  return anime.filter((item) => item.watched).length / anime.length
+})
+```
+
+get을 사용하면 다른 atom에게서 값을 가져올 수 있는듯
+progressAtom이 derived atom
+Use atoms
+React components 안에서 state를 읽거나 쓰기 위해 atoms를 사용
+
+Read and write from same component
+
+atoms가 같은 컴포넌트 안에서 읽고 쓰여질 때, 결합된 useAtom hook을 사용하자!
+
+```tsx
+import { useAtom } from 'jotai'
+
+const AnimeApp = () => {
+  const [anime, setAnime] = useAtom(animeAtom)
+
+  return (
+    <>
+      <ul>
+        {anime.map((item) => (
+          <li key={item.title}>{item.title}</li>
+        ))}
+      </ul>
+      <button
+        onClick={() => {
+          setAnime((anime) => [
+            ...anime,
+            {
+              title: 'Cowboy Bebop',
+              year: 1998,
+              watched: false,
+            },
+          ])
+        }}
+      >
+        Add Cowboy Bebop
+      </button>
+    </>
+  )
+}
+```
+
+useAtom은 그냥 전역 상태를 관리하는 useState 느낌
+읽기&쓰기를 다 할 때는 useAtom을 써라
+Read and write from separate components
+
+atom 값들이 읽거나 쓰기만 하는 경우, 리렌더링을 최적화하기 위해 분리된 useAtomValue와 useSetAtom hook을 사용하자!
+
+```tsx
+import { useAtomValue, useSetAtom } from 'jotai'
+
+const AnimeList = () => {
+  const anime = useAtomValue(animeAtom)
+
+  return (
+    <ul>
+      {anime.map((item) => (
+        <li key={item.title}>{item.title}</li>
+      ))}
+    </ul>
+  )
+}
+
+const AddAnime = () => {
+  const setAnime = useSetAtom(animeAtom)
+
+  return (
+    <button
+      onClick={() => {
+        setAnime((anime) => [
+          ...anime,
+          {
+            title: 'Cowboy Bebop',
+            year: 1998,
+            watched: false,
+          },
+        ])
+      }}
+    >
+      Add Cowboy Bebop
+    </button>
+  )
+}
+
+const ProgressTracker = () => {
+  const progress = useAtomValue(progressAtom)
+
+  return <div>{Math.trunc(progress * 100)}% watched</div>
+}
+
+const AnimeApp = () => {
+  return (
+    <>
+      <AnimeList />
+      <AddAnime />
+      <ProgressTracker />
+    </>
+  )
+}
+```
+
+읽기만 하는 경우에는 useAtomValue()를 사용하고, 쓰기만 하는 경우에는 useSetAtom()을 사용하자
+recoil이랑 비슷함 Server-side rendering 만약 Next.js나 Gatsby 같은 SSR 프레임워크를 사용한다면,
+root에서 최소한 하나의 Provider component를 사용해야 한다
+
+```tsx
+import { Provider } from 'jotai'
+
+// Placement is framework-specific (see below)
+
+<Provider>
+  {...}
+</Provider>
+```
+
+Next.js(app directory)의 경우
+
+분리된 client 컴포넌트 안에 provider 생성
+root layout.js 서버 컴포넌트에서 해당 provider import 해서 감싸주기
+// providers.js (app directory)
+
+```tsx
+'use client'
+
+import { Provider } from 'jotai'
+
+export default function Providers({ children }) {
+  return <Provider>{children}</Provider>
+}
+
+// layout.js (app directory)
+import Providers from './providers'
+
+export default function RootLayout({ children }) {
+  return (
+    <html lang="en">
+      <body>
+        <Providers>{children}</Providers>
+      </body>
+    </html>
+  )
+}
+```
+
+API overview
+
+1. Core
+   Jotai는 매우 최소화된 API를 가지고 있으며, TypeScirpt 친화적
+   React의 useState hook만큼 사용이 간단하지만, 모든 state는 전역적으로 접근 가능하고, 파생된 state를 구현하기 쉽고, 불필요한 리렌더링이 자동으로 제거됨
+
+2. Utilities
+   Jotai 패키지에는 또한 jotai/utils 번들이 포함되어 있다!!
+   이 추가적인 함수들은 localStorage에서 atom을 유지하거나, SSR 중에 atom을 hydrate하거나, Redux와 유사한 reducer와 action types를 atom을 생성하는 등에 대한 추가적인 지원을 해 줌
+
+```tsx
+import { useAtom } from 'jotai'
+import { atomWithStorage } from 'jotai/utils'
+
+// Set the string key and the initial value
+const darkModeAtom = atomWithStorage('darkMode', false)
+
+const Page = () => {
+  // Consume persisted state like any other atom
+  const [darkMode, setDarkMode] = useAtom(darkModeAtom)
+  const toggleDarkMode = () => setDarkMode(!darkMode)
+  return (
+    <>
+      <h1>Welcome to {darkMode ? 'dark' : 'light'} mode!</h1>
+      <button onClick={toggleDarkMode}>toggle theme</button>
+    </>
+  )
+}
+```
+
+localStorage에 atom을 세팅하는 예제
+
+Integrations 각 공식 integration을 위한 분리된 패키지들도 존재함
+
+tRPC, Immer, Query, XState, URQL, Optics, Relay, location, molecules, cache 등등 몇몇 integration들은 atomWithImmer(Immer)나 atomWithMachine(XState)와 같은 쓰기 함수를 갖춘 새로운 atom
+types을 제공하기도 함
+
+다른 것들은 atomWithLocation이나 atomWithHash와 같은 양방향 데이터 바인딩을 위한 atom types를 제공하기도 함
+
+```tsx
+import {useAtom} from 'jotai' import {atomWithImmer} from
+'jotai-immer'
+
+// Create a new atom with an immer-based write function
+const countAtom = atomWithImmer(0)
+
+const Counter = () => {
+const [count] = useAtom(countAtom)
+return (
+
+<div>count: {count}</div>) }
+
+const Controls = () => {
+// setCount === update: (draft: Draft<Value>) => void
+const [, setCount] = useAtom(countAtom)
+const increment = () => setCount((c) => (c = c + 1))
+return (
+
+<button onClick={increment}>+1</button>) }
+```
+
+Immer와 사용되는 integration인 jotai-immer에 대한 예제
+
+✨ 기본만 정리해서 그런지 사용법이 굉장히 쉬운 것 같다👻 아직 Redux 등 다른 상태관리 도구만큼 메이저한 툴이 아니라 그런지 레퍼가 적어서 걱정했는데, 복잡하지도 않고 공식 문서도 잘 되어 있어서 다행이다. Integration을 사용하진 않을 것 같고 Core 위주로 쓰되 종종 Utils도 쓰는 형태로 사용할 것 같다. 다음 포스트에서는 Core 내용을 자세히 정리하고, Utils에서 유용할 것 같은 메소드 위주로 정리해 보면 좋을 것 같다!

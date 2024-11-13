@@ -1,0 +1,309 @@
+---
+title: '살면서 처음 해보는 통합테스트'
+date: '2024-01-16'
+tags: ['Backend']
+draft: false
+summary: '살면서 처음 해보는 통합테스트'
+images: []
+---
+
+🦡 작성자 : 아연
+
+## 살면서 처음 해보는 통합테스트
+
+그래서 그냥 흥청망청 테스트 됨
+
+---
+
+처음 내 시나리오는
+
+1. User 만들고
+2. Mentoring 만들어서
+3. User의 상태별 멘토링 조회하면
+4. Mentoring이 나온다.
+
+였는데 이대로 한 건지는 잘 모르겠다 .. 하핫
+
+일단 모든 통합테스트에서 사용될 **Base Class** 를 만들자.
+
+```java
+@SpringBootTest
+@AutoConfigureMockMvc
+@Disabled
+@Transactional
+public class IntegrationTest {
+
+    @Autowired
+    protected MockMvc mvc;
+
+    @Autowired
+    private WebApplicationContext ctx;
+
+    @BeforeEach
+    void setUp() {
+        mvc = MockMvcBuilders
+                .webAppContextSetup(ctx)
+                .apply(springSecurity())
+                .alwaysExpect(status().isOk())
+                .alwaysExpect(content().contentType(MediaType.APPLICATION_JSON))
+                .build();
+    }
+}
+```
+
+Mock MVC를 설정하려면 MockMvcBuilders를 사용한다. 이 클래스는 정적 메서드 두 개를 제공한다.
+
+- standaloneSetup() : 수동으로 생성하고 구성한 컨트롤러 한 개 이상을 서비스할 Mock MVC를 만든다.
+- webAppContextSetup() : 구성된 컨트롤러 한 개 이상을 포함하는 스프링 애플리케이션 컨텍스트를 사용하여 Mock MVC를 만든다.
+
+이제 내가 원하는 **사용자**로 실행하는 테스트가 필요하다. 이를 위해서는 요청에 인증 정보를 추가해야 하는데 `RequestPostProcessor` 또는 `Annotation`을 사용할 수 있다.
+
+### 1. **RequestPostProcessor 사용하기**
+
+- UserRequestPostProcessor.user()
+
+```java
+mvc
+	.perform(get("/").with(user("user")))
+
+mvc
+	.perform(get("/admin").with(user("admin").password("pass").roles("USER","ADMIN")))
+```
+
+여기서 `user` 는
+
+```java
+public static UserRequestPostProcessor user(String username) {
+		return new UserRequestPostProcessor(username);
+}
+```
+
+얘다.
+
+- 그 외
+
+```java
+mvc
+	.perform(get("/").with(anonymous()))
+
+mvc
+	.perform(get("/").with(authentication(authentication)))
+
+mvc
+	.perform(get("/").with(user(userDetails)))
+
+mvc
+	.perform(get("/").with(securityContext(securityContext)))
+```
+
+### 2. Annotaions **사용하기**
+
+Spring Security 테스트 지원을 사용하기 전에 설정이 필요하다.
+
+```java
+@ExtendWith(SpringExtension.class)
+@ContextConfiguration
+public class WithMockUserTests {
+	// ...
+}
+```
+
+- @WithMockUser
+
+```java
+@WithMockUser
+
+@WithMockUser(username="admin",roles={"USER","ADMIN"})
+
+// 값에 ROLE_ 접두사가 붙지 않게 하고싶으면
+@WithMockUser(username = "admin", authorities = { "ADMIN", "USER" })
+```
+
+- 그 외
+
+```java
+@WithAnonymousUser
+
+// userDetailsServiceBeanName은 UserDetailsService 빈 이름이다.
+@WithUserDetails(value="username", userDetailsServiceBeanName="authDetailsService")
+```
+
+기본적으로 보안 컨텍스트는 JUnit의 `@Before` 이전에 발생한다. `@WithUserDetails(setupBefore = TestExecutionEvent.TEST_EXECUTION)` 으로 설정하면 JUnit의 `@Before` 이후에 발생한다.
+
+---
+
+(( JPA 쿼리 Method 를 사용했을 때 잘 돌아가던 코드 ^^,, 지금은 안 됨 ))
+
+```java
+class MentoringControllerTest extends IntegrationTest {
+    private AuthDetails authDetails;
+
+    @BeforeEach
+    void setUp() {
+				User user1 = new User(1L, 1L, "mail", "후배", "011", "profile", 0, Role.USER, true, now(), now(), false);
+
+        authDetails = new AuthDetails(user1);
+        Authentication auth = new UsernamePasswordAuthenticationToken(authDetails, "", authDetails.getAuthorities());
+        SecurityContextHolder.getContext().setAuthentication(auth);
+
+        // Create and save the user
+        User user2 = new User(100L, 2L, "mail", "선배", "01011111111", "profile", 0, Role.SENIOR, true, LocalDateTime.now(), LocalDateTime.now(), false);
+        Senior senior = new Senior(1L, user2, "a", Status.WAITING, 100, new Info(), new Profile(), now(), now());
+
+        // Create and save the mentoring
+        Mentoring mentoring = new Mentoring(99L, user1, senior, "topic", "question", "date", 40, 20000, Status.WAITING, LocalDateTime.now(), LocalDateTime.now());
+    }
+
+    @Test
+    @DisplayName("대학생이 신청한 멘토링 목록 조회")
+    void getWaitingMentorings() throws Exception {
+        mvc.perform(get("/mentoring/me/waiting").with(user(authDetails)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("MT200"))
+                .andExpect(jsonPath("$.message").value("멘토링 리스트 조회에 성공하였습니다."))
+                .andExpect(jsonPath("$.data").isNotEmpty());
+    }
+}
+```
+
+위에서 `with(user("user"))` 도 써보고 `@WithMockUser` 도 다 써 봤는데 통과는 함. 문제는 `mentoring` 을 담은 `mentoringInfos` 이 반환될 줄 알았는데 계속 **빈 리스트**만 반환됨 ㅜㅅㅜ
+
+그래서 그냥 response의
+
+- status - 200
+- code - "MT200"
+- message - "멘토링 리스트 조회에 성공하였습니다."
+- data - isNotEmpty()
+
+만으로 만족하려고 했다. 일단 응답이 오는 데 오류는 안나니까 . . .
+
+---
+
+이것들 다 써보고 알았다. 나는 지금 security를 통과할 인증 정보가 필요한 게 아니라 멘토링을 가진 유저의 토큰이 필요하다는 것 😇 . .
+
+그래서
+
+1. 토큰을 발급할 유저(`user`) 만들고
+2. 선배(`senior`, `userOfSenior`) 도 만들고
+3. 멘토링(`mentoring`)도 만들었다
+
+```java
+class MentoringControllerTest extends IntegrationTest {
+    @Autowired
+    private JwtUtils jwtUtil;
+    @Autowired
+    private UserRepository userRepository;
+    @Autowired
+    private SeniorRepository seniorRepository;
+    @Autowired
+    private MentoringRepository mentoringRepository;
+    private User user;
+    private Senior senior;
+    private Long userId;
+    private String accessToken;
+
+    @BeforeEach
+    void setUp() {
+        user = new User(0L, 1L, "mail", "후배", "011", "profile", 0, Role.USER, true, now(), now(), false);
+        userRepository.save(user);
+        userId = user.getUserId();
+
+        User userOfSenior = new User(0L, 2L, "mail", "선배", "012", "profile", 0, Role.SENIOR, true, now(), now(), false);
+        userRepository.save(userOfSenior);
+
+        Info info = new Info("major", "서울대학교", "교수님", "키워드1,키워드2", "랩실", "인공지능", false, false, "인공지능,키워드1,키워드2");
+        Profile profile = new Profile("저는요", "한줄소개", "대상", "chatLink", 40);
+        senior = new Senior(0L, userOfSenior, "certification", WAITING, 0, info, profile, now(), now());
+        seniorRepository.save(senior);
+
+        accessToken = jwtUtil.generateAccessToken(userId, Role.USER);
+    }
+
+    @Test
+    @DisplayName("대학생이 신청한 멘토링 목록을 조회한다")
+    void getWaitingMentorings() throws Exception {
+        Mentoring waitingMentoring = new Mentoring(0L, user, senior, "topic", "question", "date", 40, Status.WAITING, now(), now());
+        mentoringRepository.save(waitingMentoring);
+
+        mvc.perform(get("/mentoring/me/waiting")
+                        .header("Authorization", "Bearer " + accessToken))
+								.andDo(print());
+    }
+```
+
+```json
+{
+  "code": "MT200",
+  "message": "멘토링 리스트 조회에 성공하였습니다.",
+  "data": {
+    "mentoringInfos": [
+      {
+        "mentoringId": 185,
+        "seniorId": 114,
+        "profile": "profile",
+        "nickName": "선배",
+        "postgradu": "서울대학교",
+        "major": "major",
+        "lab": "랩실",
+        "term": 40
+      }
+    ]
+  }
+}
+```
+
+이제야 원하는 멘토링이 나왔다.
+
+그럼 정말 값이 올바른지 테스트해보자.
+
+```java
+@Test
+@DisplayName("대학생이 신청한 멘토링 목록을 조회한다")
+void getWaitingMentorings() throws Exception {
+    Mentoring waitingMentoring = new Mentoring(0L, user, senior, "topic", "question", "date", 40, Status.WAITING, now(), now());
+    mentoringRepository.save(waitingMentoring);
+
+    mvc.perform(get("/mentoring/me/waiting")
+                    .header("Authorization", "Bearer " + accessToken))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.code").value("MT200"))
+            .andExpect(jsonPath("$.message").value("멘토링 리스트 조회에 성공하였습니다."))
+            .andExpect(jsonPath("$.data.mentoringInfos[0].profile").value(containsString("profile")))
+            .andExpect(jsonPath("$.data.mentoringInfos[0].nickName").value(containsString("선배")))
+            .andExpect(jsonPath("$.data.mentoringInfos[0].postgradu").value(containsString("서울대학교")))
+            .andExpect(jsonPath("$.data.mentoringInfos[0].major").value(containsString("major")))
+            .andExpect(jsonPath("$.data.mentoringInfos[0].lab").value(containsString("랩실")))
+            .andExpect(jsonPath("$.data.mentoringInfos[0].term").value(40))
+            .andExpect(jsonPath("$.data.mentoringInfos[0].chatLink").doesNotExist())
+            .andDo(print());
+}
+```
+
+JsonPath는 json 객체를 탐색하기 위한 표준화된 방법이다.
+
+- 점 표기법
+
+> $.tool.jsonpath.creator.location[2]
+
+- 대괄호 표기법
+
+> $['tool']['jsonpath']['creator']['location'][2]
+
+자세한 표기법은 아래를 참고하자.
+
+[Introduction to JsonPath | Baeldung](https://www.baeldung.com/guide-to-jayway-jsonpath)
+
+통합테스트의 단점은
+
+<aside>
+🧐 애플리케이션의 설정과 모든 빈들을 스캔하여 등록하기 때문에 동작 시간이 오래 걸리고 무겁다.
+
+</aside>
+
+![Untitled](https://prod-files-secure.s3.us-west-2.amazonaws.com/5eda31ee-1593-4ecf-bfad-bae333b90117/7617dbd8-57e2-42da-9475-c3d81104d3a1/Untitled.png)
+
+내가 잘못써서 오래걸리는 건지
+
+원래 오래걸리는 건지
+
+쩝 . . .

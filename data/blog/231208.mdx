@@ -1,0 +1,62 @@
+---
+title: '내 서비스는 시스루 옷을 입고 있을까?'
+date: '2023-12-08'
+tags: ['Frontend', 'Backend']
+draft: false
+summary: '우리의 서비스 내부 시스템이 옷을 잘 입고 있을까'
+images: []
+---
+
+## 내 서비스는 시스루 옷을 입고 있을까?
+
+**참조할 링크의 제목이다.**
+
+[웹 애플리케이션을 배포하기 전, 꼭 해야 할 일! | Disquiet\*](https://disquiet.io/@intervalzero/makerlog/웹-애플리케이션을-배포하기-전-꼭-해야-할-일)
+
+[내 서비스는 시스루 옷을 입고 있을까? | Disquiet\*](https://disquiet.io/@intervalzero/makerlog/내-서비스는-시스루-옷을-입고-있을까)
+
+말 그대로 우리의 서비스 내부 시스템이 옷을 잘 입고 있을까?
+
+전에 개발팀에 몇번 언급한 내용인데, 개발단계에서 통신의 디버깅을 위해 로그를 저장하는 MongoDB의 데이터가 삭제된다고 했던걸 기억할 것이다.
+
+### 그저 개발 단계의 로그를 저장한다고 너무 방심하고 있었다.
+
+매일 전 세계 수많은 해커 비스무리한 아마 중국인들이ㅋㅋ 내 DB를 구경하고 있었다.
+
+![](https://efficacious-camel-96c.notion.site/image/https%3A%2F%2Fprod-files-secure.s3.us-west-2.amazonaws.com%2F5eda31ee-1593-4ecf-bfad-bae333b90117%2Fb02e8f1e-8df5-4276-9a81-285ec1eb624f%2FUntitled.png?table=block&id=bff3e140-944c-4e9d-8494-aeb346c4d15f&spaceId=5eda31ee-1593-4ecf-bfad-bae333b90117&width=1420&userId=&cache=v2)
+
+위의 노란 ip는 저 유럽의 ip를 가리키고 있다. 아마 vpn돌렸을 것이다.
+
+그리고 drop 명령어를 치고 있다..!
+
+![](https://efficacious-camel-96c.notion.site/image/https%3A%2F%2Fprod-files-secure.s3.us-west-2.amazonaws.com%2F5eda31ee-1593-4ecf-bfad-bae333b90117%2F9589b858-01bc-43a1-a39f-d09fc7bde09f%2FUntitled.png?table=block&id=2cd25002-32c0-4048-94a9-a97be757c5a0&spaceId=5eda31ee-1593-4ecf-bfad-bae333b90117&width=1420&userId=&cache=v2)
+
+그리고 사실 아무생각 없이 지나쳤던 Database를 확인해보니 기본이 아닌 누군가 만든 것이다!
+
+이름은 말 그대로 너의 data를 살리기 위해서는 읽어보라는 것이다!
+
+![](https://efficacious-camel-96c.notion.site/image/https%3A%2F%2Fprod-files-secure.s3.us-west-2.amazonaws.com%2F5eda31ee-1593-4ecf-bfad-bae333b90117%2F7846af15-2d18-4f5a-a38c-ef2abe1b28c0%2FUntitled.png?table=block&id=8cf6b698-bed8-476c-806f-be1ef7199f82&spaceId=5eda31ee-1593-4ecf-bfad-bae333b90117&width=1420&userId=&cache=v2)
+
+그리고 여기서 안내해주는 페이지를 들어가면 돈 내놓으면 데이터 살려주겠다고 한다,,,
+
+개가튼 넘들이다.
+
+**사실 이전에 진행하던 프로젝트에서 개발 단계에서 redis에 저장한 토큰을 삭제 당한 경험이 있어서 부랴부랴 비밀번호 설정하고 했던 기억이 있는데 인간은 망각의 동물이라더니,,**
+
+이전 프로젝트는 그 이후에 해외 ip를 필터에서 걸러내기도 하고 몇가지 신경을 썼었는데 너무 안일했다.
+
+![](https://efficacious-camel-96c.notion.site/image/https%3A%2F%2Fprod-files-secure.s3.us-west-2.amazonaws.com%2F5eda31ee-1593-4ecf-bfad-bae333b90117%2F73069593-4cb2-4c43-94d8-6e88219623ef%2FUntitled.png?table=block&id=31090a87-ad87-46ca-98ef-5b7353a7ec28&spaceId=5eda31ee-1593-4ecf-bfad-bae333b90117&width=1420&userId=&cache=v2)
+
+![](https://efficacious-camel-96c.notion.site/image/https%3A%2F%2Fprod-files-secure.s3.us-west-2.amazonaws.com%2F5eda31ee-1593-4ecf-bfad-bae333b90117%2Fc0916bd5-822b-489d-a3cd-d3e05578bb54%2FUntitled.png?table=block&id=83ab282c-5f54-42ee-a334-1e47e59230f9&spaceId=5eda31ee-1593-4ecf-bfad-bae333b90117&width=1420&userId=&cache=v2)
+
+문제를 파악한 김에 이 ip에 연결된 포트들을 한번씩 모두 체크해보니 모두 접근중이다.
+
+물론, 하나는 접근 이후에 id, pw 를 못쳐서 더이상 접근을 하지 못한 것 같고 아래의 경우는 클라우드 제공해주는 업체에 따로 돈을 지불하지 않고는 완전히 막을 수 없다. 물론, 이전에 진행한 프로젝트에서 넣어주었던 해외 ip차단을 이용하던가 서비스 시작되면 ip를 제한해주거나 하면 해결할 수 있다.
+
+다만 개발 단계에서 프론트 ip를 고정시키기 어려워서 고민을 해볼 필요가 있을 것 같다.
+
+### 백엔드 뿐만이 아니다 프론트도 배포를 진행한다면 ip가 스캔될 것이고 시스템을 위해 만약 몇가지 툴을 연결했다면 기본적인 보안은 필수일 것이다.
+
+아무런 조치를 하지 않는다면 단순히 ip:port로 누구나 그리고 언제나 접근할 수 있다.
+
+신경쓰자..!
