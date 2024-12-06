@@ -25,7 +25,7 @@ module.exports = {
         sans: ['var(--font-space-grotesk)', ...fontFamily.sans],
       },
       colors: {
-        primary: colors.pink,
+        primary: colors.green,
         gray: colors.gray,
       },
       zIndex: {
@@ -58,7 +58,7 @@ module.exports = {
         invert: {
           css: {
             a: {
-              color: theme('colors.primary.500'),
+              color: theme('colors.gray.400'),
               '&:hover': {
                 color: `${theme('colors.primary.400')}`,
               },

@@ -56,6 +56,9 @@ export const metadata: Metadata = {
     card: 'summary_large_image',
     images: [siteMetadata.socialBanner],
   },
+  icons: {
+    icon: '/static/favicons/logo.png',
+  },
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

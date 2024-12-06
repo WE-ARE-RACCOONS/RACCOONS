@@ -7,7 +7,7 @@ const siteMetadata = {
   siteUrl: 'https://tailwind-nextjs-starter-blog.vercel.app',
   siteRepo: 'https://github.com/WE-ARE-RACCOONS/RACCOONS',
   siteLogo: `${process.env.BASE_PATH || ''}/static/images/logo.png`,
-  email: '706shin1728@naver.com',
+  email: 'grad.kimseonbae@gmail.com',
   analytics: {
     umamiAnalytics: {
       umamiWebsiteId: process.env.NEXT_UMAMI_ID, // e.g. 123e4567-e89b-12d3-a456-426614174000
