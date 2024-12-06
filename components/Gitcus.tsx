@@ -25,6 +25,8 @@ export default function Giscus() {
     scriptElem.setAttribute('data-input-position', 'bottom')
     scriptElem.setAttribute('data-theme', theme)
     scriptElem.setAttribute('data-lang', 'ko')
+    scriptElem.setAttribute('data-category-id', 'DIC_kwDONOeDQs4Ck9xb')
+    scriptElem.setAttribute('data-category', 'General')
     ref.current.style.width = '100%'
 
     ref.current.appendChild(scriptElem)
